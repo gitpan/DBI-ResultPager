@@ -1,0 +1,5 @@
+MANIFEST
+README
+Makefile.PL
+lib/DBI/ResultPager.pm
+t/00load.t

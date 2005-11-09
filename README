@@ -1,0 +1,10 @@
+DBI::ResultPager
+
+This class is a quick and easy method of paging result sets returned
+from the DBI database interface.  It takes a standard SQL query along
+with a database handle and performs the query, inserting the resultant
+rows into a pageable HTML table.  Various options such as sort order can
+be adjusted, and columns can have formatters attached.  Columns can also
+be hidden, and custom columns can be added to the output.
+
+See the POD documentation for examples and more details.
