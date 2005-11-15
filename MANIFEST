@@ -1,5 +1,6 @@
 MANIFEST
 README
+Changes
 Makefile.PL
 lib/DBI/ResultPager.pm
 t/00load.t

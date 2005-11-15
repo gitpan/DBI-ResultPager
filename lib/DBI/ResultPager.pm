@@ -11,7 +11,7 @@ use DBI;
 BEGIN {
 	use Exporter ();
 	our ($VERSION, @ISA);
-	$VERSION = '0.9.0';
+	$VERSION = '0.9.1';
 	@ISA = qw(Exporter);
 }
 
@@ -20,7 +20,7 @@ sub new {
 	my $self = {};
 	$self->{DBH} = '';
 	$self->{QUERY} = '';
-	$self->{PERPAGE} = 100;
+	$self->{PERPAGE} = 30;
 	$self->{DEFAULTORDER} = '';
 
 	my %fmt = ();
@@ -46,8 +46,8 @@ sub display {
 
 	my $hidden = $self->{HIDDENCOLUMNS};
 	my $query = $self->{QUERY};
-	my $perpage = $self->{PERPAGE};
-	my $offset = (($page - 1) * $perpage);
+	my $perPage = $self->{PERPAGE};
+	my $offset = (($page - 1) * $perPage);
 	my $dbh = $self->{DBH};
 	my $order = $self->{DEFAULTORDER};
 	
@@ -58,7 +58,7 @@ sub display {
 		$query = $query . ' order by ' . $order;
 	}
 
-	$query = $query . ' limit ' . ($perpage + 1);
+	$query = $query . ' limit ' . ($perPage + 1);
 
 	if($page ne 1) {
 		$query = $query . " offset $offset";
@@ -97,7 +97,7 @@ sub display {
 	while(my @row = $sth->fetchrow_array()) {
 		$count++;
 		
-		if($count > $perpage) { next; }
+		if($count > $perPage) { next; }
 
 		my $color = "";
 		if( ($count %2) eq 1) {
@@ -138,7 +138,7 @@ sub display {
 
 	print '</table>';
 
-	if($count > $perpage) {
+	if($count > $perPage) {
 		my $u = url(-relative=>1, -query=>1);
 		if($u =~ /[\?&;]page=/) {
 			$u =~ s/[\?&;]page=[0-9]*//;
@@ -181,7 +181,7 @@ sub addColumnFormatter {
 	$formatters->{$column} = $formatref;
 }
 
-sub defaultorder {
+sub defaultOrder {
 	my $self = shift;
 	if(@_) { $self->{DEFAULTORDER} = shift; }
 	return $self->{DEFAULTORDER};
@@ -191,6 +191,12 @@ sub dbh {
 	my $self = shift;
 	if(@_) { $self->{DBH} = shift; }
 	return $self->{DBH};
+}
+
+sub perPage {
+	my $self = shift;
+	if(@_) { $self->{PERPAGE} = shift; }
+	return $self->{PERPAGE};
 }
 
 sub query {
@@ -209,6 +215,8 @@ DBI::ResultPager - creates an HTML-based pager for DBI result sets.
 =head1 SYNOPSIS
 
  # Create a pageable result set
+ use DBI::ResultPager;
+ 
  my $rp = DBI::ResultPager->new;
  $rp->dbh($dbh);
  $rp->query('select books.title, authors.name
@@ -257,7 +265,9 @@ DBI::ResultPager - creates an HTML-based pager for DBI result sets.
    my (@row) = (@_);
    return '<a href="delete.cgi?id=' . $row[0] . '">delete</a>';
  }
- 
+
+ # Set the number of results per page:
+ $rp->perPage(20);
 
 =head1 DESCRIPTION
 

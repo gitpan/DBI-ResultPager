@@ -1,0 +1,6 @@
+2005-11-15	Luke Reeves <luke@neuro-tech.net>
+	
+	Release 0.9.1
+
+	Updated the documentation to include the "perPage" attribute and
+	fixed the spelling of the defaultOrder attribute.
