@@ -5,13 +5,12 @@ package DBI::ResultPager;
 use strict;
 use warnings;
 use CGI qw/:standard/;
-use CGI::Carp qw(fatalsToBrowser);
 use DBI;
 
 BEGIN {
 	use Exporter ();
 	our ($VERSION, @ISA);
-	$VERSION = '0.9.1';
+	$VERSION = '0.9.2';
 	@ISA = qw(Exporter);
 }
 
@@ -22,6 +21,7 @@ sub new {
 	$self->{QUERY} = '';
 	$self->{PERPAGE} = 30;
 	$self->{DEFAULTORDER} = '';
+	$self->{ALIGN} = '';
 
 	my %fmt = ();
 	my %hidden = ();
@@ -36,7 +36,16 @@ sub new {
 }
 
 sub display {
-	my $self = shift;
+	my ($self, @params) = (@_);
+	my $rv = getOutput($self, @params);
+	print $rv;
+}
+
+sub getOutput {
+	my ($self, @params) = (@_);
+
+	my $output = '';
+	
 	my @columns;
 	my $page = 1;
 	
@@ -64,33 +73,31 @@ sub display {
 		$query = $query . " offset $offset";
 	}
 
-	#print "$query<br />";
-		
 	my $sth = $dbh->prepare($query);
-	$sth->execute or die "Error in $query: $!\n";
+	$sth->execute(@params) or die "Error in $query: $!\n";
 
-	print '<center><table width="90%" border="0">';
+	$output .= '<center><table width="90%" border="0">';
 	
 	my $nref = $sth->{NAME};
 	my @names = @$nref;
 
 	# Print the header.
-	print '<tr>';
+	$output .= '<tr>';
 	foreach(@names) {
 		if(!defined($hidden->{$_})) {
-			print '<th>' . $_ . '</th>';
+			$output .= '<th>' . $_ . '</th>';
 		}
 		
 		push(@columns, $_);		
 	}
 
 	foreach(@customColumns) {
-		print '<th>' . $_->{'columnName'} . '</th>';
+		$output .= '<th>' . $_->{'columnName'} . '</th>';
 	}
 
 	# Add headers for any custom columns
 	
-	print '</tr>';
+	$output .= "</tr>\n";
 	
 	my $formatters = $self->{FORMATTERS};
 	my $count = 0;
@@ -104,8 +111,13 @@ sub display {
 			$color = ' bgcolor="#EEEEEE"';
 		}
 
-		print "<tr$color>";
+		$output .= "<tr$color>";
 		my $colcount = 0;
+		my $al = '';
+		my $align = $self->{ALIGN};
+		if($align ne '') {
+			$al = ' valign="' . $align . '"';
+		}
 
 		foreach(@row) {
 			$colcount++;
@@ -113,47 +125,72 @@ sub display {
 			
 			if(defined($hidden->{$colname})) { next; }
 			
-			print '<td>';
+			$output .= '<td' . $al . '>';
 
 			# Check if this column has a custom formatter
 			if(defined($formatters->{$colname})) {
 				my $subref = $formatters->{$colname};
-				print &$subref($_);
+				$output .= &$subref($_, \@row);
 			} else {	
-				print $_;
+				$output .= $_;
 			}
 
-			print '</td>';
+			$output .= '</td>';
 		}
 	
 		foreach(@customColumns) {
-			print '<td>';
+			$output .= '<td' . $al . '>';
 			my $cref = $_->{'codeRef'};
-			print &$cref(@row);
-			print '</td>';
+			$output .= &$cref(@row) .  '</td>';
 		}
 
-		print '</tr>';
+		$output .= "</tr>\n";
 	}
 
-	print '</table>';
+	$output .= '</table>';
+	
+	my $prev = 0;
+	if($offset ne 0) {
+		my $u = manglePage($page - 1);
+		$output .= '<a href="' . $u . '">Previous Page</a>';
+		$prev = 1;
+	}
 
 	if($count > $perPage) {
-		my $u = url(-relative=>1, -query=>1);
-		if($u =~ /[\?&;]page=/) {
-			$u =~ s/[\?&;]page=[0-9]*//;
-		}
-
-		if($u =~ /\?/) {
-			$u = $u . '&page=' . ($page + 1);
-		} else {
-			$u = $u . '?page=' . ($page + 1);
+	
+		if($prev ne 0) {
+			$output .= ' | ';
 		}
 		
-		print '<a href="'. $u . '">Next Page</a>';
+		my $u = manglePage($page + 1);
+		$output .= '<a href="'. $u . '">Next Page</a>';
 	}
 	
-	print '</center>';
+	$output .= '</center>';
+}
+
+sub alignRows {
+	my ($self, $align) = (@_);
+	$self->{ALIGN} = $align;
+}
+
+# Returns the current URL with the given page number.
+# FIXME: URL params only
+sub manglePage {
+	my ($page) = (@_);
+
+	my $u = url(-relative=>1, -query=>1);
+	if($u =~ /[\?&;]page=/) {
+		$u =~ s/[\?&;]page=[0-9]*//;
+	}
+
+	if($u =~ /\?/) {
+		$u = $u . '&page=' . $page;
+	} else {
+		$u = $u . '?page=' . $page;
+	}
+
+	return $u;
 }
 
 sub hideColumn {
@@ -269,6 +306,12 @@ DBI::ResultPager - creates an HTML-based pager for DBI result sets.
  # Set the number of results per page:
  $rp->perPage(20);
 
+ # Vertically align the outputted columns:
+ $rp->alignRows('top');
+
+ # Get the outputted table as a scalar
+ my $output = $rp->getOutput();
+
 =head1 DESCRIPTION
 
 This class is a quick and easy method of paging result sets returned 
@@ -280,15 +323,27 @@ be hidden, and custom columns can be added to the output.
 
 =head1 METHODS
 
+=head2 dbh
+
+This sets the DBI database handle for query execution.
+
+=head2 addColumnFormatter (name, formatter)
+
+Adds a custom formatting routine to a column.  When a row of that column is 
+rendered, the customer format routine is called with two parameters - the 
+value of the data in that cell, and a list reference containing the current
+row of the resultset.  The list reference is useful for referring to other
+elements in the current row.
+
 =head1 SOURCE AVAILABILITY
 
 The source for this project should always be available from CPAN.  Other than
-that it may be found at http://www.neuro-tech.net/.
+that it may be found at https://neuro-tech.net/.
 
 =head1 AUTHOR
 
 	Original code:		Luke Reeves <luke@neuro-tech.net>
-				http://www.neuro-tech.net/
+				https://neuro-tech.net/
 
 =head1 COPYRIGHT
 
